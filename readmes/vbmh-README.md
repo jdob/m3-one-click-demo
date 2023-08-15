@@ -11,35 +11,53 @@ A fully functioning Metal<sup>3</sup> deployment
 
 Define and start a default storage pool
 ```
-virsh pool-define-as default dir - - - - "/default"
-virsh pool-build default
-virsh pool-start default
-virsh pool-autostart default
+sudo virsh pool-define-as default dir - - - - "/default"
+sudo virsh pool-build default
+sudo virsh pool-start default
+sudo virsh pool-autostart default
 ```
 - This is for Sushy-Tools initialization.
 
 Create storage for virtual machines
 ```
-qemu-img create -f qcow2 /var/lib/libvirt/images/node1.qcow2 30G
-qemu-img create -f qcow2 /var/lib/libvirt/images/node2.qcow2 30G
+sudo qemu-img create -f qcow2 /var/lib/libvirt/images/node1.qcow2 30G
+sudo qemu-img create -f qcow2 /var/lib/libvirt/images/node2.qcow2 30G
 ```
 - This is so that one virtual machine acts as a control plane and another as a worker node. You can add as many worker nodes as you wish.
 
 Install Depedencies
+
+### Ubuntu
 ```
 sudo apt install apache2-utils -y
-pip install sushy-tools
+sudo pip install sushy-tools
 sudo DEBIAN_FRONTEND=noninteractive apt install podman -y
 ```
+### OpenSUSE
+```
+sudo zypper install -y apache2-utils
+sudo pip install sushy-tools
+sudo zypper install -y podman
+```
+
 - apache2-utils is so that we can use `htpasswd`, podman is so that we can run Sushy-Tools in a container
 
 Create Virtual Machines using Virt
-```
-virt-install --name node-1 --memory 4096 --vcpus 2 --disk /var/lib/libvirt/images/node1.qcow2 --network bridge=m3-prov,model=virtio --osinfo detect=on --console pty,target_type=virtio --noautoconsole --graphics vnc --boot nvram.template=/usr/share/OVMF/OVMF_VARS.fd --boot loader=/usr/share/OVMF/OVMF_CODE.secboot.fd --boot loader.secure=no --boot loader.type=pflash --boot loader.readonly=yes --debug -v --machine pc-q35-5.1 --noautoconsole
 
-virt-install --name node-2 --memory 4096 --vcpus 2 --disk /var/lib/libvirt/images/node2.qcow2 --network bridge=m3-prov,model=virtio --osinfo detect=on --console pty,target_type=virtio --noautoconsole --graphics vnc --boot nvram.template=/usr/share/OVMF/OVMF_VARS.fd --boot loader=/usr/share/OVMF/OVMF_CODE.secboot.fd --boot loader.secure=no --boot loader.type=pflash --boot loader.readonly=yes --debug -v --machine pc-q35-5.1 --noautoconsole
-
+### Ubuntu
 ```
+virt-install --name node-1 --memory 4096 --vcpus 2 --disk /var/lib/libvirt/images/node1.qcow2 --network bridge=m3-prov,model=virtio --osinfo detect=on --console pty,target_type=virtio --graphics vnc --boot nvram.template=/usr/share/OVMF/OVMF_VARS.fd --boot loader=/usr/share/OVMF/OVMF_CODE.secboot.fd --boot loader.secure=no --boot loader.type=pflash --boot loader.readonly=yes --debug -v --machine pc-q35-5.1 --noautoconsole
+
+virt-install --name node-2 --memory 4096 --vcpus 2 --disk /var/lib/libvirt/images/node2.qcow2 --network bridge=m3-prov,model=virtio --osinfo detect=on --console pty,target_type=virtio --graphics vnc --boot nvram.template=/usr/share/OVMF/OVMF_VARS.fd --boot loader=/usr/share/OVMF/OVMF_CODE.secboot.fd --boot loader.secure=no --boot loader.type=pflash --boot loader.readonly=yes --debug -v --machine pc-q35-5.1 --noautoconsole
+```
+
+### OpenSUSE
+```
+sudo virt-install --name node-1 --memory 2048 --vcpus 1 --disk /var/lib/libvirt/images/node1.qcow2 --network bridge=m3-prov,model=virtio --osinfo detect=on --console pty,target_type=virtio --graphics vnc --boot uefi --debug -v --machine pc-q35-5.1 --noautoconsole
+
+sudo virt-install --name node-2 --memory 2048 --vcpus 1 --disk /var/lib/libvirt/images/node2.qcow2 --network bridge=m3-prov,model=virtio --osinfo detect=on --console pty,target_type=virtio --graphics vnc --boot uefi --debug -v --machine pc-q35-5.1 --noautoconsole
+```
+
 - This assumes you will be running 1 control plane and 1 worker node.
 
 Create a directory to store Sushy-tools related files
@@ -84,7 +102,7 @@ Create Password Configuration within `~/vbmc`
 htpasswd -b -B -c auth.conf foo foo
 ```
 - Defaults are for simplicity, feel free to change.
-- This is necessary for Metal3's bare metal node manifests.
+- This is the authentication into Redfish running on Sushy tools.
 
 Create SSL Certificates within `~/vbmc`
 ```
@@ -108,8 +126,8 @@ Grab the mac addresses and Sushy-Tools IDs of the virtual machines and save in v
 NODE1ID=$(curl -L https://$IP_ADDR:8000/redfish/v1/Systems/node-1 -k -u "foo:foo" | jq -r '.UUID')
 NODE2ID=$(curl -L https://$IP_ADDR:8000/redfish/v1/Systems/node-2 -k -u "foo:foo" | jq -r '.UUID')
 
-NODE1MAC=$(virsh dumpxml node-1 | grep 'mac address' | grep -ioE "([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
-NODE2MAC=$(virsh dumpxml node-2 | grep 'mac address' | grep -ioE "([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
+NODE1MAC=$(sudo virsh dumpxml node-1 | grep 'mac address' | grep -ioE "([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
+NODE2MAC=$(sudo virsh dumpxml node-2 | grep 'mac address' | grep -ioE "([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}")
 ```
 - The first 2 commands grab the UUID's from Sushy-Tools, the second two commands grab the mac addresses from virsh.
 
@@ -176,8 +194,7 @@ EOF
 
 Copy the baremetal node YAMLs to the metal3-core VM
 ```
-scp node1.yaml metal@192.168.125.99:
-scp node2.yaml metal@192.168.125.99:
+scp node*.yaml metal@192.168.125.99:
 ```
 
 SSH Into the metal3-core VM
@@ -187,7 +204,7 @@ ssh metal@192.168.125.99
 
 Install Python Dependency
 ```
-sudo zypper install python310-dbm
+sudo zypper install -y python310-dbm
 ```
 - To use "baremetal" commands, this dependency recently became necessary.
 
